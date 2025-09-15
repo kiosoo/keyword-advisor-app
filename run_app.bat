@@ -1,0 +1,2 @@
+streamlit run streamlit_trend_app.py
+pause

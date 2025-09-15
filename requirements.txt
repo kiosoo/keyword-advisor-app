@@ -1,0 +1,6 @@
+streamlit
+pandas
+pytrends
+matplotlib
+scikit-learn
+google-api-python-client
