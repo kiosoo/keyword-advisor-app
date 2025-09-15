@@ -13,6 +13,7 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+import time
 
 # --- Dữ liệu tĩnh ---
 COUNTRIES = {
@@ -65,33 +66,19 @@ def search_youtube_videos_with_rotation(query):
                 q=query, part='snippet', maxResults=5, type='video', order='relevance'
             )
             response = request.execute()
-            
             st.session_state.youtube_key_index = (current_key_index + 1) % len(api_keys)
-            
-            videos = []
-            for item in response.get('items', []):
-                videos.append({
-                    'id': item['id']['videoId'],
-                    'title': item['snippet']['title'],
-                    'channel': item['snippet']['channelTitle'],
-                    'thumbnail': item['snippet']['thumbnails']['high']['url'],
-                    'url': f'https://www.youtube.com/watch?v={item["id"]["videoId"]}'
-                })
+            videos = [{'id': item['id']['videoId'], 'title': item['snippet']['title'], 'channel': item['snippet']['channelTitle'], 'thumbnail': item['snippet']['thumbnails']['high']['url'], 'url': f'https://www.youtube.com/watch?v={item["id"]["videoId"]}'} for item in response.get('items', [])]
             return videos, None
-
         except HttpError as e:
             error_details = e.error_details
             is_quota_error = any(detail.get('reason') in ['quotaExceeded', 'dailyLimitExceeded'] for detail in error_details) if error_details else False
-            
             if is_quota_error:
                 print(f"Key {current_key_index + 1} đã hết quota. Đang chuyển sang key tiếp theo...")
                 continue
             else:
                 return None, f"Lỗi API với Key {current_key_index + 1}: {e}. Vui lòng kiểm tra lại key."
-        
         except Exception as e:
             return None, f"Đã xảy ra lỗi không xác định: {e}"
-
     return None, "Tất cả các API key đều đã hết hạn ngạch hoặc không hợp lệ."
 
 def calculate_potential_score(interest_series, related_queries_data):
@@ -115,10 +102,8 @@ def calculate_potential_score(interest_series, related_queries_data):
             numeric_val = pd.to_numeric(str(val).replace('+','').replace('%','').replace(',',''), errors='coerce')
             return numeric_val if pd.notnull(numeric_val) else 0
         rising_df['value_numeric'] = rising_df['value'].apply(process_rising_value)
-        num_rising = len(rising_df)
-        avg_growth = rising_df['value_numeric'].mean()
-        num_rising_score = min(num_rising / 10, 1) * 25
-        avg_growth_score = min(avg_growth / 1000, 1) * 25
+        num_rising_score = min(len(rising_df) / 10, 1) * 25
+        avg_growth_score = min(rising_df['value_numeric'].mean() / 1000, 1) * 25
         growth_score = num_rising_score + avg_growth_score
     total_score = int(interest_score + growth_score)
     if total_score >= 70: label, color = 'Tiềm năng cao', '#28a745'
@@ -129,15 +114,23 @@ def calculate_potential_score(interest_series, related_queries_data):
 def generate_advice(kw, metrics):
     score = metrics['score']
     if score >= 70:
-        if metrics['growth_score'] > metrics['interest_score']: advice = f"**🟢 ĐÂY LÀ MỘT CƠ HỘI VÀNG!** Điểm tiềm năng cao của **'{kw}'** chủ yếu đến từ **sự bùng nổ của các thị trường ngách** liên quan... \n\n**Chiến lược:** **Hành động nhanh!**..."
-        else: advice = f"**🟢 CHỦ ĐỀ ĐANG RẤT THỊNH HÀNH!** **'{kw}'** đang có mức độ quan tâm rất cao và ổn định... \n\n**Chiến lược:** Cạnh tranh sẽ rất cao..."
+        advice = f"**🟢 ĐÂY LÀ MỘT CƠ HỘI VÀNG!**..." if metrics['growth_score'] > metrics['interest_score'] else f"**🟢 CHỦ ĐỀ ĐANG RẤT THỊNH HÀNH!**..."
     elif score >= 40:
-        if metrics['slope'] > 0: advice = f"**🟡 CƠ HỘI NGÁCH BỀN VỮNG.** **'{kw}'** là một chủ đề có sự tăng trưởng ổn định... \n\n**Chiến lược:** Tập trung vào việc **giải quyết các vấn đề cụ thể**..."
-        else: advice = f"**🟡 CHỦ ĐỀ 'EVERGREEN' CẦN TÌM NGÁCH.** **'{kw}'** có một lượng khán giả ổn định... \n\n**Chiến lược:** Hãy **đào thật sâu** vào một khía cạnh rất nhỏ..."
+        advice = f"**🟡 CƠ HỘI NGÁCH BỀN VỮNG.**..." if metrics['slope'] > 0 else f"**🟡 CHỦ ĐỀ 'EVERGREEN' CẦN TÌM NGÁCH.**..."
     else:
-        if metrics['avg_interest'] > 30: advice = f"**🔴 CẨN TRỌNG - THỊ TRƯỜNG BÃO HÒA.** **'{kw}'** có thể có lượng tìm kiếm cao... \n\n**Chiến lược:** **Nên tránh** nếu bạn là người mới..."
-        else: advice = f"**🔴 CHỦ ĐỀ ÍT QUAN TÂM.** Lượng tìm kiếm cho **'{kw}'** hiện tại rất thấp... \n\n**Chiến lược:** Hãy sử dụng công cụ để tìm kiếm các từ khóa khác..."
-    return advice
+        advice = f"**🔴 CẨN TRỌNG - THỊ TRƯỜDNG BÃO HÒA.**..." if metrics['avg_interest'] > 30 else f"**🔴 CHỦ ĐỀ ÍT QUAN TÂM.**..."
+    # Placeholder for full advice text to keep it short
+    full_advice = {
+        "gold": f"**🟢 ĐÂY LÀ MỘT CƠ HỘI VÀNG!** Điểm tiềm năng cao của **'{kw}'** chủ yếu đến từ **sự bùng nổ của các thị trường ngách** liên quan. Mặc dù chủ đề chính có thể chưa phải lớn nhất, nhưng các truy vấn con đang tăng trưởng cực kỳ mạnh. \n\n**Chiến lược:** **Hành động nhanh!** Hãy tập trung sản xuất nội dung xoay quanh các chủ đề đang 'nóng' trong bảng 'Truy vấn đang tăng trưởng' để đón đầu xu hướng.",
+        "popular": f"**🟢 CHỦ ĐỀ ĐANG RẤT THỊNH HÀNH!** **'{kw}'** đang có mức độ quan tâm rất cao và ổn định từ cộng đồng. Đây là một chủ đề lớn với lượng khán giả dồi dào. \n\n**Chiến lược:** Cạnh tranh sẽ rất cao. Video của bạn cần phải **thực sự nổi bật** về chất lượng hoặc có một **góc nhìn độc đáo** mà chưa ai khai thác.",
+        "sustainable": f"**🟡 CƠ HỘI NGÁCH BỀN VỮNG.** **'{kw}'** là một chủ đề có sự tăng trưởng ổn định nhưng không quá bùng nổ. Đây là cơ hội tuyệt vời để xây dựng nội dung chất lượng và thu hút một lượng khán giả trung thành với mức độ cạnh tranh vừa phải. \n\n**Chiến lược:** Tập trung vào việc **giải quyết các vấn đề cụ thể** cho khán giả. Hãy xem bảng 'Truy vấn đang tăng trưởng' để tìm những ý tưởng video chi tiết.",
+        "evergreen": f"**🟡 CHỦ ĐỀ 'EVERGREEN' CẦN TÌM NGÁCH.** **'{kw}'** có một lượng khán giả ổn định nhưng không còn trong giai đoạn tăng trưởng. Để thành công, bạn không nên làm video chung chung. \n\n**Chiến lược:** Hãy **đào thật sâu** vào một khía cạnh rất nhỏ của chủ đề này. Phân tích bảng 'Truy vấn hàng đầu' để hiểu khán giả đang tìm kiếm gì và tạo ra nội dung tốt hơn các đối thủ.",
+        "saturated": f"**🔴 CẨN TRỌNG - THỊ TRƯỜNG BÃO HÒA.** **'{kw}'** có thể có lượng tìm kiếm cao, nhưng xu hướng chung đang giảm và không có nhiều tín hiệu tăng trưởng mới. Cạnh tranh trong chủ đề này cực kỳ khốc liệt với nhiều kênh lớn đã chiếm lĩnh. \n\n**Chiến lược:** **Nên tránh** nếu bạn là người mới. Trừ khi bạn có một ý tưởng thực sự đột phá, thời gian của bạn nên được đầu tư vào các chủ đề tiềm năng hơn.",
+        "low_interest": f"**🔴 CHỦ ĐỀ ÍT QUAN TÂM.** Lượng tìm kiếm cho **'{kw}'** hiện tại rất thấp và không có dấu hiệu tăng trưởng. Sẽ rất khó để xây dựng một video thành công với chủ đề này. \n\n**Chiến lược:** Hãy sử dụng công cụ để tìm kiếm các từ khóa khác có tiềm năng tốt hơn."
+    }
+    if score >= 70: return full_advice["gold"] if metrics['growth_score'] > metrics['interest_score'] else full_advice["popular"]
+    elif score >= 40: return full_advice["sustainable"] if metrics['slope'] > 0 else full_advice["evergreen"]
+    else: return full_advice["saturated"] if metrics['avg_interest'] > 30 else full_advice["low_interest"]
 
 # --- Giao diện người dùng ---
 st.title("🧠 Công Cụ Cố Vấn Từ Khóa của LVH-Kiosoo")
@@ -156,21 +149,37 @@ if submitted:
     keywords = [kw.strip() for kw in keywords_str.split(',') if kw.strip()]
     if not keywords or not country_code: st.warning("Vui lòng nhập từ khóa và chọn quốc gia.")
     else:
-        with st.spinner("Đang phân tích và chấm điểm..."): interest_data, related_data, error = analyze_trends_data(keywords, country_code, timeframe, gprop)
+        with st.spinner("Đang phân tích và chấm điểm..."):
+            time.sleep(0.5) 
+            interest_data, related_data, error = analyze_trends_data(keywords, country_code, timeframe, gprop)
         if error: st.error(error)
         elif interest_data is not None:
             st.header("1. Bảng điểm Tiềm năng")
             score_cards = st.columns(len(keywords)); all_metrics = {}
             for i, kw in enumerate(keywords):
-                metrics = calculate_potential_score(interest_data[kw], related_data.get(kw, {})); all_metrics[kw] = metrics
+                metrics = calculate_potential_score(interest_data.get(kw, pd.Series()), related_data.get(kw, {}))
+                all_metrics[kw] = metrics
                 with score_cards[i]: st.markdown(f"""<div style="background-color:{metrics['color']}; color:white; padding: 20px; border-radius: 10px; text-align: center; height: 180px; display: flex; flex-direction: column; justify-content: center;"><h4 style="color: white; margin-bottom: 5px;">{kw.upper()}</h4><h1 style="color: white; font-size: 3.5rem; margin: 0;">{metrics['score']}</h1><p style="color: white; margin-top: 5px;">{metrics['label']}</p></div>""", unsafe_allow_html=True)
+            
             st.header("2. Phân tích & Lời khuyên từ Cố vấn")
             for kw in keywords:
-                with st.expander(f"**Xem phân tích chi tiết cho từ khóa: '{kw}'**"): st.markdown(generate_advice(kw, all_metrics[kw]))
+                with st.expander(f"**Xem phân tích chi tiết cho từ khóa: '{kw}'**"):
+                    metrics = all_metrics[kw]
+                    # SỬA LỖI TẠI ĐÂY: Chỉ tạo lời khuyên nếu có đủ dữ liệu
+                    if 'avg_interest' in metrics:
+                        advice = generate_advice(kw, metrics)
+                        st.markdown(advice)
+                    else:
+                        # Hiển thị thông báo thân thiện khi không có dữ liệu
+                        st.info(f"Không có đủ dữ liệu xu hướng cho từ khóa '{kw}' để đưa ra lời khuyên chi tiết.")
+
             st.header("3. Biểu đồ so sánh Mức độ quan tâm")
             fig, ax = plt.subplots(figsize=(15, 7))
-            for kw in keywords: ax.plot(interest_data.index, interest_data[kw], label=kw)
+            for kw in keywords:
+                if kw in interest_data.columns:
+                    ax.plot(interest_data.index, interest_data[kw], label=kw)
             ax.set_title(f"So sánh xu hướng tại '{country_name}'", fontsize=16); ax.legend(); ax.grid(True); st.pyplot(fig)
+
             st.header("4. Dữ liệu chi tiết (Insight Tăng trưởng)")
             for kw in keywords:
                 if kw in related_data and related_data[kw]:
@@ -186,7 +195,7 @@ if submitted:
                                 if error: st.error(error)
                                 elif videos:
                                     for video in videos:
-                                        v_col1, v_col2 = st.columns([1, 4])
+                                        v_col1, v_col2 = st.columns([1, 4]);
                                         with v_col1: st.image(video['thumbnail'])
                                         with v_col2: st.markdown(f"**[{video['title']}]({video['url']})**"); st.caption(f"Kênh: {video['channel']}")
                                         st.markdown("---") 
