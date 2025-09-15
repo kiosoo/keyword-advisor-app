@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-CÔNG CỤ CỐ VẤN TỪ KHÓA CỦA LVH-KIOSOO
+CÔNG CỤ CỐ VẤN CỦA LÝ VĂN HIỆP(KIOSOO)
 Xây dựng bằng Streamlit.
 Để chạy, bạn cần cài đặt: pip install streamlit pandas pytrends matplotlib scikit-learn google-api-python-client
 Sau đó chạy lệnh: streamlit run streamlit_trend_app.py
@@ -13,7 +13,7 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-import time
+import time # <<< THÊM DÒNG NÀY
 
 # --- Dữ liệu tĩnh ---
 COUNTRIES = {
@@ -27,7 +27,7 @@ COUNTRIES = {
 SORTED_COUNTRIES = dict(sorted(COUNTRIES.items()))
 
 # --- Cấu hình trang web ---
-st.set_page_config(page_title="Công Cụ Cố Vấn Từ Khóa của LVH-Kiosoo", page_icon="🧠", layout="wide")
+st.set_page_config(page_title="CÔNG CỤ CỐ VẤN CỦA LÝ VĂN HIỆP(KIOSOO)", page_icon="🧠", layout="wide")
 
 # --- Khởi tạo Session State để quản lý API Key ---
 if 'youtube_key_index' not in st.session_state:
@@ -113,12 +113,6 @@ def calculate_potential_score(interest_series, related_queries_data):
 
 def generate_advice(kw, metrics):
     score = metrics['score']
-    if score >= 70:
-        advice = f"**🟢 ĐÂY LÀ MỘT CƠ HỘI VÀNG!**..." if metrics['growth_score'] > metrics['interest_score'] else f"**🟢 CHỦ ĐỀ ĐANG RẤT THỊNH HÀNH!**..."
-    elif score >= 40:
-        advice = f"**🟡 CƠ HỘI NGÁCH BỀN VỮNG.**..." if metrics['slope'] > 0 else f"**🟡 CHỦ ĐỀ 'EVERGREEN' CẦN TÌM NGÁCH.**..."
-    else:
-        advice = f"**🔴 CẨN TRỌNG - THỊ TRƯỜDNG BÃO HÒA.**..." if metrics['avg_interest'] > 30 else f"**🔴 CHỦ ĐỀ ÍT QUAN TÂM.**..."
     # Placeholder for full advice text to keep it short
     full_advice = {
         "gold": f"**🟢 ĐÂY LÀ MỘT CƠ HỘI VÀNG!** Điểm tiềm năng cao của **'{kw}'** chủ yếu đến từ **sự bùng nổ của các thị trường ngách** liên quan. Mặc dù chủ đề chính có thể chưa phải lớn nhất, nhưng các truy vấn con đang tăng trưởng cực kỳ mạnh. \n\n**Chiến lược:** **Hành động nhanh!** Hãy tập trung sản xuất nội dung xoay quanh các chủ đề đang 'nóng' trong bảng 'Truy vấn đang tăng trưởng' để đón đầu xu hướng.",
@@ -133,7 +127,7 @@ def generate_advice(kw, metrics):
     else: return full_advice["saturated"] if metrics['avg_interest'] > 30 else full_advice["low_interest"]
 
 # --- Giao diện người dùng ---
-st.title("🧠 Công Cụ Cố Vấn Từ Khóa của LVH-Kiosoo")
+st.title("🧠 CÔNG CỤ CỐ VẤN CỦA LÝ VĂN HIỆP(KIOSOO)")
 st.markdown("Phân tích, chấm điểm và đưa ra lời khuyên chiến lược cho các chủ đề của bạn.")
 st.sidebar.header("⚙️ Tùy chọn Phân tích")
 timeframe = st.sidebar.selectbox("1. Khung thời gian", [('7 ngày qua', 'now 7-d'), ('30 ngày qua', 'today 1-m'), ('90 ngày qua', 'today 3-m'), ('12 tháng qua', 'today 12-m'), ('5 năm qua', 'today 5-y'), ('Từ 2004', 'all')], format_func=lambda x: x[0])[1]
@@ -150,7 +144,7 @@ if submitted:
     if not keywords or not country_code: st.warning("Vui lòng nhập từ khóa và chọn quốc gia.")
     else:
         with st.spinner("Đang phân tích và chấm điểm..."):
-            time.sleep(0.5) 
+            time.sleep(0.5) # <<< THÊM ĐỘ TRỄ ĐỂ TRÁNH LỖI 429
             interest_data, related_data, error = analyze_trends_data(keywords, country_code, timeframe, gprop)
         if error: st.error(error)
         elif interest_data is not None:
@@ -165,12 +159,10 @@ if submitted:
             for kw in keywords:
                 with st.expander(f"**Xem phân tích chi tiết cho từ khóa: '{kw}'**"):
                     metrics = all_metrics[kw]
-                    # SỬA LỖI TẠI ĐÂY: Chỉ tạo lời khuyên nếu có đủ dữ liệu
                     if 'avg_interest' in metrics:
                         advice = generate_advice(kw, metrics)
                         st.markdown(advice)
                     else:
-                        # Hiển thị thông báo thân thiện khi không có dữ liệu
                         st.info(f"Không có đủ dữ liệu xu hướng cho từ khóa '{kw}' để đưa ra lời khuyên chi tiết.")
 
             st.header("3. Biểu đồ so sánh Mức độ quan tâm")
