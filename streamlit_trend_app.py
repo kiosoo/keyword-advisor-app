@@ -33,17 +33,16 @@ if 'youtube_key_index' not in st.session_state:
     st.session_state.youtube_key_index = 0
 
 # --- Các hàm tính toán và tiện ích ---
-# @st.cache_data(ttl=3600) # Tạm thời tắt cache để kiểm tra lỗi 429 dễ hơn, sau có thể bật lại
+@st.cache_data(ttl=3600)
 def analyze_trends_data(keywords, country_code, timeframe, gprop):
     """
-    HÀM ĐƯỢC NÂNG CẤP VỚI LOGIC TỰ ĐỘNG THỬ LẠI (EXPONENTIAL BACKOFF)
+    Hàm được nâng cấp với logic tự động thử lại (Exponential Backoff)
     """
-    retries = 3  # Số lần thử lại tối đa
-    delay = 1    # Thời gian chờ ban đầu (giây)
+    retries = 3
+    delay = 1
     
     for i in range(retries):
         try:
-            # Thêm timeout để tránh ứng dụng bị treo
             pytrends = TrendReq(hl='en-US', tz=360, timeout=(10, 25)) 
             pytrends.build_payload(kw_list=keywords, timeframe=timeframe, geo=country_code, gprop=gprop)
             
@@ -54,28 +53,25 @@ def analyze_trends_data(keywords, country_code, timeframe, gprop):
                 return None, None, "Không tìm thấy dữ liệu."
             
             interest_df.drop(columns=['isPartial'], inplace=True, errors='ignore')
-            return interest_df, related_queries, None # Trả về kết quả nếu thành công
+            return interest_df, related_queries, None
 
         except ReadTimeout:
              if i < retries - 1:
                 st.toast(f"Google Trends phản hồi chậm, đang thử lại lần {i+1}/{retries-1}...")
                 time.sleep(delay)
-                delay *= 2 # Gấp đôi thời gian chờ
+                delay *= 2
              else:
                 return None, None, "Lỗi: Google Trends không phản hồi kịp thời. Vui lòng thử lại sau."
 
         except Exception as e:
-            # Chỉ thử lại nếu gặp lỗi 429
             if 'response with code 429' in str(e):
                 if i < retries - 1:
                     st.toast(f"Bị giới hạn truy cập, đang thử lại sau {delay} giây...")
                     time.sleep(delay)
-                    delay *= 2 # Gấp đôi thời gian chờ cho lần thử tiếp theo
+                    delay *= 2
                 else:
-                    # Nếu thử hết số lần mà vẫn lỗi
                     return None, None, f"Lỗi: Google Trends đang tạm thời giới hạn truy cập. Vui lòng thử lại sau ít phút. (Code: 429)"
             else:
-                # Nếu là lỗi khác, báo lỗi ngay lập tức
                 return None, None, f"Đã xảy ra lỗi không xác định: {e}"
     
     return None, None, "Đã thử lại nhiều lần nhưng không thành công."
@@ -98,7 +94,7 @@ def search_youtube_videos_with_rotation(query):
             request = youtube.search().list(q=query, part='snippet', maxResults=5, type='video', order='relevance')
             response = request.execute()
             st.session_state.youtube_key_index = (current_key_index + 1) % len(api_keys)
-            videos = [{'id': item['id']['videoId'], 'title': item['snippet']['title'], 'channel': item['snippet']['channelTitle'], 'thumbnail': item['snippet']['thumbnails']['high']['url'], 'url': f'https://www.youtube.com/watch?v={item["id"]["videoId"]}'} for item in response.get('items', [])]
+            videos = [{'id': item['id']['videoId'], 'title': item['snippet']['title'], 'channel': item['snippet']['channelTitle'], 'thumbnail': item['snippet']['thumbnails']['high']['url'], 'url': f'[https://www.youtube.com/watch?v=](https://www.youtube.com/watch?v=){item["id"]["videoId"]}'} for item in response.get('items', [])]
             return videos, None
         except HttpError as e:
             error_details = e.error_details
@@ -143,15 +139,15 @@ def calculate_potential_score(interest_series, related_queries_data):
     return {'score': total_score, 'label': label, 'color': color, 'interest_score': interest_score, 'growth_score': growth_score, 'slope': slope, 'avg_interest': avg_interest, 'rising_df': rising_df}
 
 def generate_advice(kw, metrics):
-    score = metrics['score']
+    score = metrics.get('score', 0)
     full_advice = {
-        "gold": f"**🟢 ĐÂY LÀ MỘT CƠ HỘI VÀNG!** ...",
-        "popular": f"**🟢 CHỦ ĐỀ ĐANG RẤT THỊNH HÀNH!** ...",
-        "sustainable": f"**🟡 CƠ HỘI NGÁCH BỀN VỮNG.** ...",
-        "evergreen": f"**🟡 CHỦ ĐỀ 'EVERGREEN' CẦN TÌM NGÁCH.** ...",
-        "saturated": f"**🔴 CẨN TRỌNG - THỊ TRƯỜNG BÃO HÒA.** ...",
-        "low_interest": f"**🔴 CHỦ ĐỀ ÍT QUAN TÂM.** ..."
-    } # Giữ ngắn gọn để tập trung vào logic
+        "gold": f"**🟢 ĐÂY LÀ MỘT CƠ HỘI VÀNG!** Điểm tiềm năng cao của **'{kw}'** chủ yếu đến từ **sự bùng nổ của các thị trường ngách** liên quan. Mặc dù chủ đề chính có thể chưa phải lớn nhất, nhưng các truy vấn con đang tăng trưởng cực kỳ mạnh. \n\n**Chiến lược:** **Hành động nhanh!** Hãy tập trung sản xuất nội dung xoay quanh các chủ đề đang 'nóng' trong bảng 'Truy vấn đang tăng trưởng' để đón đầu xu hướng.",
+        "popular": f"**🟢 CHỦ ĐỀ ĐANG RẤT THỊNH HÀNH!** **'{kw}'** đang có mức độ quan tâm rất cao và ổn định từ cộng đồng. Đây là một chủ đề lớn với lượng khán giả dồi dào. \n\n**Chiến lược:** Cạnh tranh sẽ rất cao. Video của bạn cần phải **thực sự nổi bật** về chất lượng hoặc có một **góc nhìn độc đáo** mà chưa ai khai thác.",
+        "sustainable": f"**🟡 CƠ HỘI NGÁCH BỀN VỮNG.** **'{kw}'** là một chủ đề có sự tăng trưởng ổn định nhưng không quá bùng nổ. Đây là cơ hội tuyệt vời để xây dựng nội dung chất lượng và thu hút một lượng khán giả trung thành với mức độ cạnh tranh vừa phải. \n\n**Chiến lược:** Tập trung vào việc **giải quyết các vấn đề cụ thể** cho khán giả. Hãy xem bảng 'Truy vấn đang tăng trưởng' để tìm những ý tưởng video chi tiết.",
+        "evergreen": f"**🟡 CHỦ ĐỀ 'EVERGREEN' CẦN TÌM NGÁCH.** **'{kw}'** có một lượng khán giả ổn định nhưng không còn trong giai đoạn tăng trưởng. Để thành công, bạn không nên làm video chung chung. \n\n**Chiến lược:** Hãy **đào thật sâu** vào một khía cạnh rất nhỏ của chủ đề này. Phân tích bảng 'Truy vấn hàng đầu' để hiểu khán giả đang tìm kiếm gì và tạo ra nội dung tốt hơn các đối thủ.",
+        "saturated": f"**🔴 CẨN TRỌNG - THỊ TRƯỜNG BÃO HÒA.** **'{kw}'** có thể có lượng tìm kiếm cao, nhưng xu hướng chung đang giảm và không có nhiều tín hiệu tăng trưởng mới. Cạnh tranh trong chủ đề này cực kỳ khốc liệt với nhiều kênh lớn đã chiếm lĩnh. \n\n**Chiến lược:** **Nên tránh** nếu bạn là người mới. Trừ khi bạn có một ý tưởng thực sự đột phá, thời gian của bạn nên được đầu tư vào các chủ đề tiềm năng hơn.",
+        "low_interest": f"**🔴 CHỦ ĐỀ ÍT QUAN TÂM.** Lượng tìm kiếm cho **'{kw}'** hiện tại rất thấp và không có dấu hiệu tăng trưởng. Sẽ rất khó để xây dựng một video thành công với chủ đề này. \n\n**Chiến lược:** Hãy sử dụng công cụ để tìm kiếm các từ khóa khác có tiềm năng tốt hơn."
+    }
     if score >= 70: return full_advice["gold"] if metrics.get('growth_score', 0) > metrics.get('interest_score', 0) else full_advice["popular"]
     elif score >= 40: return full_advice["sustainable"] if metrics.get('slope', 0) > 0 else full_advice["evergreen"]
     else: return full_advice["saturated"] if metrics.get('avg_interest', 0) > 30 else full_advice["low_interest"]
@@ -178,7 +174,6 @@ if submitted:
         if error: st.error(error)
         elif interest_data is not None:
             st.header("1. Bảng điểm Tiềm năng")
-            # Code hiển thị giữ nguyên
             score_cards = st.columns(len(keywords)); all_metrics = {}
             for i, kw in enumerate(keywords):
                 metrics = calculate_potential_score(interest_data.get(kw, pd.Series()), related_data.get(kw, {}))
@@ -196,7 +191,6 @@ if submitted:
                         st.info(f"Không có đủ dữ liệu xu hướng cho từ khóa '{kw}' để đưa ra lời khuyên chi tiết.")
 
             st.header("3. Biểu đồ so sánh Mức độ quan tâm")
-            # Code hiển thị giữ nguyên
             fig, ax = plt.subplots(figsize=(15, 7))
             for kw in keywords:
                 if kw in interest_data.columns:
@@ -204,7 +198,6 @@ if submitted:
             ax.set_title(f"So sánh xu hướng tại '{country_name}'", fontsize=16); ax.legend(); ax.grid(True); st.pyplot(fig)
 
             st.header("4. Dữ liệu chi tiết (Insight Tăng trưởng)")
-            # Code hiển thị giữ nguyên
             for kw in keywords:
                 if kw in related_data and related_data[kw]:
                     with st.expander(f"**Xem Insight và Video hàng đầu cho: '{kw}'**"):
@@ -225,47 +218,4 @@ if submitted:
                                         st.markdown("---") 
                                 else: st.info(f"Không tìm thấy video nào cho từ khóa '{top_query}'.")
                             else: st.info("Không có từ khóa hàng đầu để tìm kiếm video.")
-```
-
----
-### ## Giải pháp 2: Sử dụng Proxy xoay vòng (Rotating Proxies) - Tốt nhất & Chuyên nghiệp (Có phí)
-
-Đây là giải pháp triệt để nhất, được sử dụng bởi các hệ thống chuyên nghiệp.
-
-* **Logic:** Thay vì tất cả yêu cầu đều xuất phát từ một địa chỉ IP duy nhất của máy chủ Streamlit, chúng ta sẽ sử dụng một dịch vụ proxy để "che giấu" và thay đổi địa chỉ IP cho mỗi yêu cầu. Từ góc nhìn của Google, các yêu cầu này đến từ hàng trăm địa điểm khác nhau trên thế giới, khiến việc phát hiện và chặn trở nên gần như không thể. 
-
-* **Ưu điểm:**
-    * Hiệu quả gần như 100% trong việc chống lỗi 429.
-    * Tốc độ có thể nhanh hơn vì các dịch vụ proxy thường được tối ưu hóa.
-    * Là giải pháp có thể mở rộng (scalable) khi ứng dụng của bạn có nhiều người dùng.
-
-* **Nhược điểm:**
-    * **Có chi phí.** Bạn sẽ phải trả tiền hàng tháng cho một dịch vụ cung cấp proxy (ví dụ: Bright Data, ScraperAPI, Smartproxy).
-
-* **Cách triển khai (Ví dụ):**
-    1.  Đăng ký một dịch vụ proxy và lấy thông tin kết nối (host, port, username, password).
-    2.  Lưu các thông tin này vào **Secrets** của Streamlit.
-    3.  Cấu hình `pytrends` để sử dụng proxy đó.
-
-    ```python
-    # Ví dụ cách cấu hình pytrends với proxy
-    
-    # Lấy thông tin từ secrets
-    proxy_host = st.secrets["proxy"]["host"]
-    proxy_port = st.secrets["proxy"]["port"]
-    proxy_user = st.secrets["proxy"]["user"]
-    proxy_pass = st.secrets["proxy"]["password"]
-
-    # Tạo chuỗi proxy
-    proxy_url = f"http://{proxy_user}:{proxy_pass}@{proxy_host}:{proxy_port}"
-    
-    # Tạo dictionary proxies
-    proxies = {
-       'http': proxy_url,
-       'https': proxy_url,
-    }
-
-    # Truyền vào pytrends
-    pytrends = TrendReq(hl='en-US', tz=360, requests_args={'proxies': proxies})
-    
 
